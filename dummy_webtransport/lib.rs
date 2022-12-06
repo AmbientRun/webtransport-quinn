@@ -887,6 +887,9 @@ impl DummyWebTransportServer {
             } else {
                 client_timeout
             };
+
+            let before_poll = std::time::Instant::now();
+    
             // if there are still packets to process on the mio socket (that is non-blocking), process them, otherwise do a poll
             match self.socket.peek(&mut self.buf[..0]) {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -903,7 +906,7 @@ impl DummyWebTransportServer {
                 // If the event loop reported no events, it means that the timeout
                 // has expired, so handle it without attempting to read packets. We
                 // will then proceed with the send loop.
-                if self.events.is_empty() {
+                if self.events.is_empty() && before_poll.elapsed() > to {
                     debug!("timed out");
 
                     self.clients.values_mut().for_each(|c| c.conn.on_timeout());
