@@ -501,6 +501,7 @@ impl DummyWebTransportClient {
             self.conn.timeout()
         };
 
+        let before_poll = std::time::Instant::now();
         self.poll.poll(&mut self.events, to)?;
 
         // Read incoming UDP packets from the socket and feed them to quiche,
@@ -510,11 +511,17 @@ impl DummyWebTransportClient {
             // has expired, so handle it without attempting to read packets. We
             // will then proceed with the send loop.
             if self.events.is_empty() {
+                
                 debug!("timed out");
 
-                self.conn.on_timeout();
 
-                break 'read;
+                if let Some(timeout) = timeout {
+                    if before_poll.elapsed() > timeout {
+                        return Ok(());
+                    }
+                    self.conn.on_timeout();
+                    break 'read;
+                }
             }
 
             let (len, from) = match self.socket.recv_from(&mut self.buf) {
@@ -815,7 +822,7 @@ impl DummyWebTransportServer {
     }
 
     pub fn listen(&mut self, timeout: Option<std::time::Duration>) -> Result<Option<Vec<u8>>, Error> {
-        loop {
+        'poll: loop {
 
             // Generate outgoing QUIC packets for all active connections and send
             // them on the UDP socket, until quiche reports that there are no more
@@ -906,12 +913,16 @@ impl DummyWebTransportServer {
                 // If the event loop reported no events, it means that the timeout
                 // has expired, so handle it without attempting to read packets. We
                 // will then proceed with the send loop.
-                if self.events.is_empty() && (to.is_none() || before_poll.elapsed() > to.unwrap()) {
+                if self.events.is_empty() {
                     debug!("timed out");
 
                     self.clients.values_mut().for_each(|c| c.conn.on_timeout());
-
-                    break 'read;
+                    if let Some(timeout) = timeout {
+                        if before_poll.elapsed() > timeout {
+                            return Ok(None);
+                        }
+                        break 'read;
+                    }
                 }
 
                 let (len, from) = match self.socket.recv_from(&mut self.buf) {
