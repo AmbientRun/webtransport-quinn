@@ -122,7 +122,7 @@ fn main() {
             Ok(Some(cid)) => {
                 loop {
                     match server.poll(&cid, &regexes) {
-                        Ok(dummy_webtransport_handler::Event::NewSession(path, _regex_index)) => info!("New webtransport session on {}", path),
+                        Ok(dummy_webtransport_handler::Event::NewSession(path, _session_id, _regex_index)) => info!("New webtransport session on {}", path),
                         Ok(dummy_webtransport_handler::Event::StreamData(session_id, stream_id)) => {
                             info!("New webtransport data on session {}, stream {}", session_id, stream_id);
                             loop {
