@@ -906,7 +906,7 @@ impl DummyWebTransportServer {
                 // If the event loop reported no events, it means that the timeout
                 // has expired, so handle it without attempting to read packets. We
                 // will then proceed with the send loop.
-                if self.events.is_empty() && before_poll.elapsed() > to {
+                if self.events.is_empty() && (to.is_none() || before_poll.elapsed() > to.unwrap()) {
                     debug!("timed out");
 
                     self.clients.values_mut().for_each(|c| c.conn.on_timeout());
