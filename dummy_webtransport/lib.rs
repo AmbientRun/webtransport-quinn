@@ -455,6 +455,13 @@ impl DummyWebTransportClient {
     pub fn wait_for_events(&mut self, timeout: Option<std::time::Duration>) -> Result<(), Error> {
         // Generate outgoing QUIC packets and send them on the UDP socket, until
         // quiche reports that there are no more packets to be sent.
+
+
+        let func_start = std::time::Instant::now();
+        let timeout_end = match timeout {
+            Some(timeout) => func_start.checked_add(timeout),
+            None => None,
+        };
         loop {
             let (write, send_info) = match self.conn.send(&mut self.dgrams_buf) {
                 Ok(v) => v,
@@ -500,6 +507,11 @@ impl DummyWebTransportClient {
         } else {
             self.conn.timeout()
         };
+            let now = std::time::Instant::now();
+            let timeout = match timeout_end {
+                Some(end_time) => Some(end_time.duration_since(now)),
+                None => None,
+            };
 
         let before_poll = std::time::Instant::now();
         self.poll.poll(&mut self.events, to)?;
@@ -516,7 +528,7 @@ impl DummyWebTransportClient {
 
 
                 if let Some(timeout) = timeout {
-                    if before_poll.elapsed() > timeout {
+                    if before_poll.elapsed() > timeout || timeout.saturating_sub(before_poll.elapsed()) < std::time::Duration::from_millis(1) {
                         return Ok(());
                     }
                     self.conn.on_timeout();
@@ -822,7 +834,17 @@ impl DummyWebTransportServer {
     }
 
     pub fn listen(&mut self, timeout: Option<std::time::Duration>) -> Result<Option<Vec<u8>>, Error> {
-        'poll: loop {
+        let func_start = std::time::Instant::now();
+        let timeout_end = match timeout {
+            Some(timeout) => func_start.checked_add(timeout),
+            None => None,
+        };
+        loop {
+            let now = std::time::Instant::now();
+            let timeout = match timeout_end {
+                Some(end_time) => Some(end_time.duration_since(now)),
+                None => None,
+            };
 
             // Generate outgoing QUIC packets for all active connections and send
             // them on the UDP socket, until quiche reports that there are no more
@@ -896,13 +918,14 @@ impl DummyWebTransportServer {
             };
 
             let before_poll = std::time::Instant::now();
-    
+            let mut packets_without_poll = false;
             // if there are still packets to process on the mio socket (that is non-blocking), process them, otherwise do a poll
             match self.socket.peek(&mut self.buf[..0]) {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     self.poll.poll(&mut self.events, to).unwrap();
                 }
                 _ => {
+                    packets_without_poll = true;
                     trace!("No need to poll, there are still packets to process from the mio socket.")
                 }
             }
@@ -914,14 +937,16 @@ impl DummyWebTransportServer {
                 // has expired, so handle it without attempting to read packets. We
                 // will then proceed with the send loop.
                 if self.events.is_empty() {
-                    debug!("timed out");
+                    debug!("timed out, timeout={:?}, to={:?}, before_poll={:?}", timeout, to, before_poll.elapsed());
 
                     self.clients.values_mut().for_each(|c| c.conn.on_timeout());
                     if let Some(timeout) = timeout {
-                        if before_poll.elapsed() > timeout {
+                        if before_poll.elapsed() > timeout || timeout.saturating_sub(before_poll.elapsed()) < std::time::Duration::from_millis(1) {
                             return Ok(None);
                         }
-                        break 'read;
+                        if !packets_without_poll {
+                            break 'read;
+                        }
                     }
                 }
 
