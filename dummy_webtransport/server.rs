@@ -107,6 +107,7 @@ fn main() {
             .open(keylog_path)
             .unwrap();
 
+        quic_config.log_keys();
         Some(file)
     } else {
         None
