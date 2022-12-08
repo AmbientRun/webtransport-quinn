@@ -507,11 +507,11 @@ impl DummyWebTransportClient {
         } else {
             self.conn.timeout()
         };
-            let now = std::time::Instant::now();
-            let timeout = match timeout_end {
-                Some(end_time) => Some(end_time.duration_since(now)),
-                None => None,
-            };
+        let now = std::time::Instant::now();
+        let timeout = match timeout_end {
+            Some(end_time) => Some(end_time.duration_since(now)),
+            None => None,
+        };
 
         let before_poll = std::time::Instant::now();
         self.poll.poll(&mut self.events, to)?;
@@ -527,11 +527,11 @@ impl DummyWebTransportClient {
                 debug!("timed out");
 
 
+                self.conn.on_timeout();
                 if let Some(timeout) = timeout {
                     if before_poll.elapsed() > timeout || timeout.saturating_sub(before_poll.elapsed()) < std::time::Duration::from_millis(1) {
                         return Ok(());
                     }
-                    self.conn.on_timeout();
                     break 'read;
                 }
             }
