@@ -1315,8 +1315,8 @@ impl DummyWebTransportServer {
         Ok(client.webtransport_sessions.stream_write(&mut client.conn, h3_conn, stream_id, data, fin)?)
     }
 
-    pub fn get_stats(mut self, client: &Vec<u8>) -> Result<quiche::Stats, Error> {
-        let client = match self.clients.get_mut(&&ConnectionId::from_vec(client.clone())) {
+    pub fn get_stats(&self, client: &Vec<u8>) -> Result<quiche::Stats, Error> {
+        let client = match self.clients.get(&&ConnectionId::from_vec(client.clone())) {
             Some(c) => c,
             None => return Err(Error::ClientNotFound),
         };
