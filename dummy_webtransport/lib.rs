@@ -411,7 +411,7 @@ impl DummyWebTransportClient {
                     ) {
                         error!("could not signal finished stream {} to webtransport session: {:?}", stream_id, e);
                     } else {
-                        info!("finished stream {}", stream_id);
+                        trace!("finished stream {}", stream_id);
                         return Ok(Event::StreamData(self.session_id, stream_id));
                     }
                 }
