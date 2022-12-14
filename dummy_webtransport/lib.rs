@@ -605,6 +605,10 @@ impl DummyWebTransportClient {
         Ok(self.conn.close(true, 0, b"session closed by the application")?)
     }
 
+    pub fn dismantle(self) -> Result<(quiche::Connection, quiche::h3::Connection), Error> {
+        Ok((self.conn, self.h3_conn))
+    }
+
 }
 
 fn contains_webtransport_connect(
