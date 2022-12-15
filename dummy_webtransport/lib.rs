@@ -593,12 +593,24 @@ impl DummyWebTransportClient {
         Ok(self.webtransport_sessions.stream_write(&mut self.conn, &mut self.h3_conn, stream_id, data, fin)?)
     }
 
+    pub fn open_uni_stream_with_priority(&mut self, urgency: u8, incremental: bool) -> Result<u64, Error> {
+        let stream_id = self.webtransport_sessions.open_uni_stream(&mut self.conn, &mut self.h3_conn, self.session_id)?;
+        self.conn.stream_priority(stream_id, urgency, incremental)?;
+        Ok(stream_id)
+    }
+
     pub fn open_uni_stream(&mut self) -> Result<u64, Error> {
-        Ok(self.webtransport_sessions.open_uni_stream(&mut self.conn, &mut self.h3_conn, self.session_id)?)
+        self.open_uni_stream_with_priority(127, false)
+    }
+
+    pub fn open_bidi_stream_with_priority(&mut self, urgency: u8, incremental: bool) -> Result<u64, Error> {
+        let stream_id = self.webtransport_sessions.open_bidi_stream(&mut self.conn, &mut self.h3_conn, self.session_id)?;
+        self.conn.stream_priority(stream_id, urgency, incremental)?;
+        Ok(stream_id)
     }
 
     pub fn open_bidi_stream(&mut self) -> Result<u64, Error> {
-        Ok(self.webtransport_sessions.open_bidi_stream(&mut self.conn, &mut self.h3_conn, self.session_id)?)
+        self.open_bidi_stream_with_priority(127, false)
     }
 
     pub fn close_session(&mut self) -> Result<(), Error> {
@@ -607,6 +619,11 @@ impl DummyWebTransportClient {
 
     pub fn dismantle(self) -> Result<(quiche::Connection, quiche::h3::Connection), Error> {
         Ok((self.conn, self.h3_conn))
+    }
+
+    // lowest urgency is the highest priority
+    pub fn set_priority(&mut self, stream_id: u64, urgency: u8, incremental: bool) -> Result<(), Error> {
+        Ok(self.conn.stream_priority(stream_id, urgency, incremental)?)
     }
 
 }
@@ -1279,12 +1296,18 @@ impl DummyWebTransportServer {
     }
 
     pub fn open_uni_stream(&mut self, client: &Vec<u8>, session_id: u64) -> Result<u64, Error> {
+        self.open_uni_stream_with_priority(client, session_id, 127, false)
+    }
+
+    pub fn open_uni_stream_with_priority(&mut self, client: &Vec<u8>, session_id: u64, urgency: u8, incremental: bool) -> Result<u64, Error> {
         let client = match self.clients.get_mut(&ConnectionId::from_vec(client.clone())) {
             Some(c) => c,
             None => return Err(Error::ClientNotFound),
         };
         let h3_conn = client.http3_conn.as_mut().unwrap();
-        Ok(client.webtransport_sessions.open_uni_stream(&mut client.conn, h3_conn, session_id)?)
+        let stream_id = client.webtransport_sessions.open_uni_stream(&mut client.conn, h3_conn, session_id)?;
+        client.conn.stream_priority(stream_id, urgency, incremental)?;
+        Ok(stream_id)
     }
 
     pub fn read(&mut self, client: &Vec<u8>, session_id: u64, stream_id: u64, data: &mut [u8]) -> Result<usize, Error> {
@@ -1329,6 +1352,16 @@ impl DummyWebTransportServer {
             None => return Err(Error::ClientNotFound),
         };
         Ok(client.conn.close(true, 0, b"session closed by the application")?)
+    }
+
+
+    // lowest urgency is the highest priority
+    pub fn set_priority(&mut self, client: &Vec<u8>, stream_id: u64, urgency: u8, incremental: bool) -> Result<(), Error> {
+        let client = match self.clients.get_mut(&&ConnectionId::from_vec(client.clone())) {
+            Some(c) => c,
+            None => return Err(Error::ClientNotFound),
+        };
+        Ok(client.conn.stream_priority(stream_id, urgency, incremental)?)
     }
 }
 
